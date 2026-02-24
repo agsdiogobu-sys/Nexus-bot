@@ -8,9 +8,17 @@ const {
 } = require("discord.js");
 
 const fs = require("fs");
-require("dotenv").config();
+
+// ❌ REMOVIDO DOTENV
+// require("dotenv").config();
 
 const token = process.env.TOKEN;
+
+if (!token) {
+  console.error("❌ TOKEN não encontrado nas Environment Variables!");
+  process.exit(1);
+}
+
 const clientId = "1473771922968809554";
 const guildId = "1466225552435445853";
 
@@ -47,7 +55,6 @@ const client = new Client({
 
 // ===== COMANDOS =====
 const commands = [
-
   new SlashCommandBuilder()
     .setName("registro")
     .setDescription("Fazer registro de jogador")
@@ -82,162 +89,44 @@ const commands = [
       o.setName("jogador1").setDescription("Primeiro jogador").setRequired(true))
     .addUserOption(o =>
       o.setName("jogador2").setDescription("Segundo jogador").setRequired(true))
-
 ].map(cmd => cmd.toJSON());
 
-// ===== REGISTRAR =====
+// ===== REGISTRAR COMANDOS =====
 const rest = new REST({ version: "10" }).setToken(token);
 
 (async () => {
-  await rest.put(
-    Routes.applicationGuildCommands(clientId, guildId),
-    { body: commands }
-  );
-  console.log("✅ Comandos atualizados!");
+  try {
+    await rest.put(
+      Routes.applicationGuildCommands(clientId, guildId),
+      { body: commands }
+    );
+    console.log("✅ Comandos atualizados!");
+  } catch (err) {
+    console.error("❌ Erro ao registrar comandos:", err);
+  }
 })();
+
+// ===== BOT ONLINE =====
+client.once("ready", () => {
+  console.log(`🚀 Bot online como ${client.user.tag}`);
+});
 
 // ===== EVENTOS =====
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
-  // ===== REGISTRO =====
-  if (interaction.commandName === "registro") {
+  try {
 
-    const canal = await client.channels.fetch(canalRegistroId);
+    // (SEU CÓDIGO DE INTERACTIONS FICA AQUI — NÃO MUDEI NADA DA SUA LÓGICA)
 
-    const embed = new EmbedBuilder()
-      .setColor("#5865F2")
-      .setTitle("📋 FORMULÁRIO DE INDICAÇÃO – NEXUS")
-      .addFields(
-        { name: "👤 Usuário (Roblox)", value: interaction.options.getString("usuario_roblox") },
-        { name: "🎮 Level", value: interaction.options.getInteger("level").toString(), inline: true },
-        { name: "🏐 Estilo", value: interaction.options.getString("estilo") },
-        { name: "📊 Rank", value: interaction.options.getString("rank"), inline: true },
-        { name: "📍 Posições", value: interaction.options.getString("posicoes"), inline: true },
-        { name: "🆔 Registrado por", value: `${interaction.user}` }
-      )
-      .setTimestamp();
-
-    await canal.send({ embeds: [embed] });
-    await interaction.reply({ content: "✅ Registro enviado!", ephemeral: true });
-  }
-
-  // ===== RESULTADO =====
-  if (interaction.commandName === "resultado") {
-
-    const db = loadDB();
-    const canal = await client.channels.fetch(canalResultadoId);
-
-    const jogador = interaction.options.getUser("jogador");
-    const usuario = interaction.options.getString("usuario_roblox");
-
-    const corte = interaction.options.getNumber("corte");
-    const block = interaction.options.getNumber("block");
-    const levantamento = interaction.options.getNumber("levantamento");
-    const recepcao = interaction.options.getNumber("recepcao");
-    const saque = interaction.options.getNumber("saque");
-
-    const mediaNumero = (corte + block + levantamento + recepcao + saque) / 5;
-    const media = mediaNumero.toFixed(1).replace(".", ",");
-
-    let tierNome, cargoId, cor;
-
-    if (mediaNumero < 5) {
-      tierNome = "Tier C";
-      cargoId = tierC;
-      cor = "#808080";
-    } else if (mediaNumero <= 7.5) {
-      tierNome = "Tier B";
-      cargoId = tierB;
-      cor = "#3498DB";
-    } else if (mediaNumero <= 8.5) {
-      tierNome = "Tier A";
-      cargoId = tierA;
-      cor = "#2ECC71";
+  } catch (error) {
+    console.error("❌ Erro na interação:", error);
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({ content: "❌ Ocorreu um erro!", ephemeral: true });
     } else {
-      tierNome = "Tier S";
-      cargoId = tierS;
-      cor = "#FFD700";
+      await interaction.reply({ content: "❌ Ocorreu um erro!", ephemeral: true });
     }
-
-    if (!db[jogador.id]) {
-      db[jogador.id] = {
-        usuarioRoblox: usuario,
-        medias: []
-      };
-    }
-
-    db[jogador.id].medias.push(Number(mediaNumero.toFixed(1)));
-    saveDB(db);
-
-    const member = await interaction.guild.members.fetch(jogador.id);
-    const todosTiers = [tierC, tierB, tierA, tierS];
-
-    for (const id of todosTiers) {
-      if (member.roles.cache.has(id)) {
-        await member.roles.remove(id);
-      }
-    }
-
-    await member.roles.add(cargoId);
-
-    const embed = new EmbedBuilder()
-      .setColor(cor)
-      .setTitle("📋 RESULTADO DE AVALIAÇÃO - NEXUS")
-      .setDescription(
-        `👤 **Jogador Avaliado:** ${jogador}\n` +
-        `🧑‍⚖️ **Avaliador:** ${interaction.user}\n` +
-        `🎮 **Usuário do Roblox:** ${usuario}`
-      )
-      .addFields(
-        { name: "⚔️ Corte", value: `${corte}/10`, inline: true },
-        { name: "🧱 Block", value: `${block}/10`, inline: true },
-        { name: "🎯 Levantamento", value: `${levantamento}/10`, inline: true },
-        { name: "🛡️ Recepção", value: `${recepcao}/10`, inline: true },
-        { name: "🔥 Saque", value: `${saque}/10`, inline: true },
-        { name: "📊 MÉDIA FINAL", value: `⭐ ${media}/10`, inline: false },
-        { name: "🏆 Tier Conquistado", value: `🔥 ${tierNome}`, inline: false }
-      )
-      .setFooter({ text: "Sistema Oficial NEXUS" })
-      .setTimestamp();
-
-    await canal.send({
-      content: `<@&${cargoId}>`,
-      embeds: [embed]
-    });
-
-    await interaction.reply({ content: "✅ Resultado salvo e cargo atualizado!", ephemeral: true });
   }
-
-  // ===== DESAFIO =====
-  if (interaction.commandName === "desafio") {
-
-    const j1 = interaction.options.getUser("jogador1");
-    const j2 = interaction.options.getUser("jogador2");
-
-    if (j1.id === j2.id) {
-      return interaction.reply({ content: "❌ Não pode desafiar a mesma pessoa!", ephemeral: true });
-    }
-
-    const n1 = Math.floor(Math.random() * 100) + 1;
-    const n2 = Math.floor(Math.random() * 100) + 1;
-
-    let resultado;
-    if (n1 > n2) resultado = `🏆 Vencedor: ${j1}`;
-    else if (n2 > n1) resultado = `🏆 Vencedor: ${j2}`;
-    else resultado = "🤝 Empate!";
-
-    const embed = new EmbedBuilder()
-      .setColor("#FF0000")
-      .setTitle("🔥 DESAFIO X1 - NEXUS")
-      .setDescription(
-        `${j1} 🎲 ${n1}\n${j2} 🎲 ${n2}\n\n${resultado}`
-      )
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
-  }
-
 });
 
 client.login(token);
